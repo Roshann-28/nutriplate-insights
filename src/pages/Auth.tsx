@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,9 +13,17 @@ import { z } from 'zod';
 const emailSchema = z.string().email('Please enter a valid email address');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
 
+const REDIRECT_STORAGE_KEY = 'nutri_redirect_to';
+
 const Auth = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, loading: authLoading, signUp, signIn, signInWithGoogle } = useAuth();
+
+  const redirectTo =
+    (location.state as any)?.redirectTo ||
+    localStorage.getItem(REDIRECT_STORAGE_KEY) ||
+    '/';
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,9 +32,10 @@ const Auth = () => {
 
   useEffect(() => {
     if (user) {
-      navigate('/');
+      localStorage.removeItem(REDIRECT_STORAGE_KEY);
+      navigate(redirectTo, { replace: true });
     }
-  }, [user, navigate]);
+  }, [user, navigate, redirectTo]);
 
   const validateForm = () => {
     const newErrors: { email?: string; password?: string } = {};
@@ -61,7 +70,8 @@ const Auth = () => {
       }
     } else {
       toast.success('Account created successfully! Welcome to NutriDiverse.');
-      navigate('/');
+      localStorage.removeItem(REDIRECT_STORAGE_KEY);
+      navigate(redirectTo, { replace: true });
     }
   };
 
@@ -81,11 +91,13 @@ const Auth = () => {
       }
     } else {
       toast.success('Welcome back!');
-      navigate('/');
+      localStorage.removeItem(REDIRECT_STORAGE_KEY);
+      navigate(redirectTo, { replace: true });
     }
   };
 
   const handleGoogleSignIn = async () => {
+    localStorage.setItem(REDIRECT_STORAGE_KEY, redirectTo);
     setLoading(true);
     const { error } = await signInWithGoogle();
     if (error) {

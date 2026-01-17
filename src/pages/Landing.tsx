@@ -78,7 +78,11 @@ export default function Landing() {
           <Button
             size="xl"
             variant="hero"
-            onClick={() => navigate("/analyze")}
+            onClick={() =>
+              user
+                ? navigate("/analyze")
+                : navigate("/auth", { state: { redirectTo: "/analyze" } })
+            }
             className="animate-fade-in-up delay-200"
           >
             Start Analysis
