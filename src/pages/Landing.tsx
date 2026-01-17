@@ -79,13 +79,11 @@ export default function Landing() {
             size="xl"
             variant="hero"
             onClick={() =>
-              user
-                ? navigate("/analyze")
-                : navigate("/auth", { state: { redirectTo: "/analyze" } })
+              user ? navigate("/analyze") : navigate("/auth")
             }
             className="animate-fade-in-up delay-200"
           >
-            Start Analysis
+            {user ? "Start Analysis" : "Sign In to Start"}
             <ArrowRight className="w-5 h-5" />
           </Button>
 

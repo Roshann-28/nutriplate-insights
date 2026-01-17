@@ -12,11 +12,18 @@ const SELECTED_FOODS_STORAGE_KEY = "nutri_selected_food_ids";
 
 export default function FoodPicker() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
 
   const [selectedFoods, setSelectedFoods] = useState<Set<string>>(new Set());
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Redirect to auth if not logged in
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate("/auth", { replace: true });
+    }
+  }, [loading, user, navigate]);
 
   useEffect(() => {
     try {
