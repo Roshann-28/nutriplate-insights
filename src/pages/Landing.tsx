@@ -1,33 +1,75 @@
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Leaf, TrendingUp, Heart } from "lucide-react";
+import { ArrowRight, Leaf, TrendingUp, Heart, LogIn, LogOut, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Landing() {
   const navigate = useNavigate();
+  const { user, signOut, loading } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
 
   return (
     <div className="min-h-screen flex flex-col">
+      {/* Header with auth buttons */}
+      <header className="container flex items-center justify-between px-6 py-4">
+        <div className="flex items-center gap-2">
+          <div className="w-10 h-10 rounded-xl bg-hero-gradient flex items-center justify-center">
+            <Leaf className="w-5 h-5 text-primary-foreground" />
+          </div>
+          <span className="text-xl font-bold text-foreground">NutriDiverse</span>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          {!loading && (
+            user ? (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-secondary">
+                  <User className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-medium text-secondary-foreground max-w-[120px] truncate">
+                    {user.email}
+                  </span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSignOut}
+                  className="gap-2"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="hidden sm:inline">Sign Out</span>
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/auth")}
+                className="gap-2"
+              >
+                <LogIn className="w-4 h-4" />
+                Sign In
+              </Button>
+            )
+          )}
+        </div>
+      </header>
+
       {/* Hero Section */}
       <main className="flex-1 flex flex-col">
         {/* Top decorative gradient */}
         <div className="absolute top-0 left-0 right-0 h-[60vh] bg-hero-gradient opacity-5 -z-10" />
 
         <div className="container flex flex-col items-center justify-center flex-1 px-6 py-12 text-center">
-          {/* Logo / Brand */}
-          <div className="flex items-center gap-2 mb-8 animate-fade-in-up">
-            <div className="w-12 h-12 rounded-2xl bg-hero-gradient flex items-center justify-center shadow-button">
-              <Leaf className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <span className="text-2xl font-bold text-foreground">NutriDiverse</span>
-          </div>
-
           {/* Main headline */}
-          <h1 className="text-display-lg text-foreground max-w-lg mb-6 animate-fade-in-up delay-100">
+          <h1 className="text-display-lg text-foreground max-w-lg mb-6 animate-fade-in-up">
             See the Hidden Truth in Your Plate
           </h1>
 
           {/* Subtitle */}
-          <p className="text-body-lg text-muted-foreground max-w-md mb-10 animate-fade-in-up delay-200">
+          <p className="text-body-lg text-muted-foreground max-w-md mb-10 animate-fade-in-up delay-100">
             Discover if your everyday foods give you real nutritional variety—or
             if you're stuck in a hidden pattern.
           </p>
@@ -37,14 +79,14 @@ export default function Landing() {
             size="xl"
             variant="hero"
             onClick={() => navigate("/analyze")}
-            className="animate-fade-in-up delay-300"
+            className="animate-fade-in-up delay-200"
           >
             Start Analysis
             <ArrowRight className="w-5 h-5" />
           </Button>
 
           {/* Trust badges */}
-          <div className="flex flex-wrap items-center justify-center gap-4 mt-12 animate-fade-in-up delay-400">
+          <div className="flex flex-wrap items-center justify-center gap-4 mt-12 animate-fade-in-up delay-300">
             <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary">
               <TrendingUp className="w-4 h-4 text-primary" />
               <span className="text-sm font-medium text-secondary-foreground">
@@ -83,7 +125,7 @@ export default function Landing() {
               <div
                 key={i}
                 className="p-6 rounded-2xl bg-card shadow-nutri border border-border text-center animate-fade-in-up"
-                style={{ animationDelay: `${400 + i * 100}ms` }}
+                style={{ animationDelay: `${300 + i * 100}ms` }}
               >
                 <span className="text-4xl mb-3 block">{feature.emoji}</span>
                 <h3 className="font-semibold text-foreground mb-1">
