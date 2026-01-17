@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { FoodCard } from "@/components/FoodCard";
@@ -6,12 +6,37 @@ import { CategoryFilter } from "@/components/CategoryFilter";
 import { SearchBar } from "@/components/SearchBar";
 import { foods, foodCategories } from "@/data/foods";
 import { ArrowLeft, ArrowRight, Leaf } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+
+const SELECTED_FOODS_STORAGE_KEY = "nutri_selected_food_ids";
 
 export default function FoodPicker() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+
   const [selectedFoods, setSelectedFoods] = useState<Set<string>>(new Set());
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(SELECTED_FOODS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setSelectedFoods(new Set(parsed.filter((x) => typeof x === "string")));
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem(
+      SELECTED_FOODS_STORAGE_KEY,
+      JSON.stringify(Array.from(selectedFoods))
+    );
+  }, [selectedFoods]);
 
   const filteredFoods = useMemo(() => {
     return foods.filter((food) => {
@@ -38,8 +63,19 @@ export default function FoodPicker() {
   };
 
   const handleAnalyze = () => {
-    // Store selected foods and navigate to results
     const selectedFoodsList = Array.from(selectedFoods);
+
+    // Persist selection so refresh/auth redirects still work
+    sessionStorage.setItem(
+      SELECTED_FOODS_STORAGE_KEY,
+      JSON.stringify(selectedFoodsList)
+    );
+
+    if (!user) {
+      navigate("/auth", { state: { redirectTo: "/results" } });
+      return;
+    }
+
     navigate("/results", { state: { selectedFoods: selectedFoodsList } });
   };
 

@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { RiskScoreCircle } from "@/components/RiskScoreCircle";
 import { NutrientRadarChart } from "@/components/NutrientRadarChart";
@@ -9,6 +9,7 @@ import { ArrowLeft, RefreshCw, Leaf, Sparkles, AlertCircle } from "lucide-react"
 import { supabase } from "@/integrations/supabase/client";
 import { foods } from "@/data/foods";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface NutrientData {
   nutrient: string;
@@ -34,45 +35,66 @@ interface AnalysisResult {
   suggestions: Suggestion[];
 }
 
+const SELECTED_FOODS_STORAGE_KEY = "nutri_selected_food_ids";
+
 export default function Results() {
   const navigate = useNavigate();
   const location = useLocation();
-  const selectedFoodIds = (location.state?.selectedFoods as string[]) || [];
-  
+  const { user } = useAuth();
+
+  const locationFoodIds = (location.state?.selectedFoods as string[]) || [];
+
+  const selectedFoodIds = useMemo(() => {
+    if (locationFoodIds.length > 0) return locationFoodIds;
+    try {
+      const raw = sessionStorage.getItem(SELECTED_FOODS_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, [locationFoodIds]);
+
+  const selectedFoodNames = useMemo(() => {
+    return selectedFoodIds.map((id) => {
+      const food = foods.find((f) => f.id === id);
+      return food ? food.name : id;
+    });
+  }, [selectedFoodIds]);
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
 
-  // Convert food IDs to food names for the AI
-  const selectedFoodNames = selectedFoodIds.map(id => {
-    const food = foods.find(f => f.id === id);
-    return food ? food.name : id;
-  });
-
   useEffect(() => {
     if (selectedFoodIds.length === 0) return;
+    if (!user) return;
 
     const fetchAnalysis = async () => {
       setIsLoading(true);
       setError(null);
 
       try {
-        const { data, error: fnError } = await supabase.functions.invoke('analyze-foods', {
-          body: { selectedFoods: selectedFoodNames }
-        });
+        const { data, error: fnError } = await supabase.functions.invoke(
+          "analyze-foods",
+          {
+            body: { selectedFoods: selectedFoodNames },
+          }
+        );
 
         if (fnError) {
           throw new Error(fnError.message);
         }
 
-        if (data.error) {
+        if (data?.error) {
           throw new Error(data.error);
         }
 
         setAnalysis(data);
       } catch (err) {
         console.error("Analysis error:", err);
-        const message = err instanceof Error ? err.message : "Failed to analyze foods";
+        const message =
+          err instanceof Error ? err.message : "Failed to analyze foods";
         setError(message);
         toast.error("Analysis failed", { description: message });
       } finally {
@@ -81,7 +103,7 @@ export default function Results() {
     };
 
     fetchAnalysis();
-  }, [selectedFoodIds.join(',')]);
+  }, [selectedFoodIds, selectedFoodNames, user]);
 
   if (selectedFoodIds.length === 0) {
     return (
@@ -93,9 +115,28 @@ export default function Results() {
         <p className="text-muted-foreground mb-6">
           Go back and select your regular foods to get your analysis.
         </p>
-        <Button onClick={() => navigate("/analyze")}>
+        <Button onClick={() => navigate("/analyze")}> 
           <ArrowLeft className="w-4 h-4 mr-2" />
           Select Foods
+        </Button>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center mb-4">
+          <Leaf className="w-8 h-8 text-primary" />
+        </div>
+        <h1 className="text-xl font-semibold text-foreground mb-2">
+          Sign in to view results
+        </h1>
+        <p className="text-muted-foreground mb-6 max-w-sm">
+          To run the analysis, please sign in. Your selected foods will be kept.
+        </p>
+        <Button onClick={() => navigate("/auth", { state: { redirectTo: "/results" } })}>
+          Sign In
         </Button>
       </div>
     );
