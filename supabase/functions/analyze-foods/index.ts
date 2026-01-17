@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +12,36 @@ serve(async (req) => {
   }
 
   try {
+    // Authentication check
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      console.error("No authorization header provided");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token);
+    
+    if (claimsError || !claimsData?.claims) {
+      console.error("Invalid token:", claimsError);
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const userId = claimsData.claims.sub;
+    console.log("Authenticated user:", userId);
+
     const { selectedFoods } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
@@ -22,7 +53,7 @@ serve(async (req) => {
       throw new Error("No foods provided for analysis");
     }
 
-    console.log("Analyzing foods:", selectedFoods);
+    console.log("Analyzing foods for user:", userId, "Foods:", selectedFoods);
 
     const systemPrompt = `You are a nutrition expert analyzing dietary diversity. Given a list of foods someone regularly eats, provide:
 1. A risk score (0-100) where 0 is excellent diversity and 100 is very poor diversity (monoculture risk)
@@ -103,7 +134,7 @@ Respond in this exact JSON format:
     }
 
     const data = await response.json();
-    console.log("AI response received");
+    console.log("AI response received for user:", userId);
     
     const analysisContent = data.choices[0]?.message?.content;
 
@@ -124,7 +155,7 @@ Respond in this exact JSON format:
     cleanedContent = cleanedContent.trim();
 
     const analysis = JSON.parse(cleanedContent);
-    console.log("Analysis parsed successfully");
+    console.log("Analysis parsed successfully for user:", userId);
 
     return new Response(JSON.stringify(analysis), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
