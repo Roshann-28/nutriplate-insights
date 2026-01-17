@@ -12,15 +12,17 @@ serve(async (req) => {
 
   try {
     const { selectedFoods } = await req.json();
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
-    if (!OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY is not configured");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
     }
 
     if (!selectedFoods || selectedFoods.length === 0) {
       throw new Error("No foods provided for analysis");
     }
+
+    console.log("Analyzing foods:", selectedFoods);
 
     const systemPrompt = `You are a nutrition expert analyzing dietary diversity. Given a list of foods someone regularly eats, provide:
 1. A risk score (0-100) where 0 is excellent diversity and 100 is very poor diversity (monoculture risk)
@@ -28,7 +30,9 @@ serve(async (req) => {
 3. Redundancy insights - patterns where similar foods overlap nutritionally
 4. Personalized suggestions for improving dietary diversity
 
-Be culturally sensitive and consider Indian dietary patterns. Provide actionable, gentle suggestions.`;
+Be culturally sensitive and consider Indian dietary patterns. Provide actionable, gentle suggestions.
+
+IMPORTANT: You must respond with valid JSON only, no markdown or extra text.`;
 
     const userPrompt = `Analyze these foods that someone eats regularly: ${selectedFoods.join(", ")}
 
@@ -61,26 +65,25 @@ Respond in this exact JSON format:
   ]
 }`;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
         temperature: 0.7,
-        response_format: { type: "json_object" },
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("OpenAI API error:", response.status, errorText);
+      console.error("Lovable AI error:", response.status, errorText);
       
       if (response.status === 429) {
         return new Response(
@@ -89,17 +92,39 @@ Respond in this exact JSON format:
         );
       }
       
-      throw new Error(`OpenAI API error: ${response.status}`);
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      throw new Error(`AI API error: ${response.status}`);
     }
 
     const data = await response.json();
+    console.log("AI response received");
+    
     const analysisContent = data.choices[0]?.message?.content;
 
     if (!analysisContent) {
-      throw new Error("No analysis content received from OpenAI");
+      throw new Error("No analysis content received from AI");
     }
 
-    const analysis = JSON.parse(analysisContent);
+    // Clean the response - remove markdown code blocks if present
+    let cleanedContent = analysisContent.trim();
+    if (cleanedContent.startsWith("```json")) {
+      cleanedContent = cleanedContent.slice(7);
+    } else if (cleanedContent.startsWith("```")) {
+      cleanedContent = cleanedContent.slice(3);
+    }
+    if (cleanedContent.endsWith("```")) {
+      cleanedContent = cleanedContent.slice(0, -3);
+    }
+    cleanedContent = cleanedContent.trim();
+
+    const analysis = JSON.parse(cleanedContent);
+    console.log("Analysis parsed successfully");
 
     return new Response(JSON.stringify(analysis), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
