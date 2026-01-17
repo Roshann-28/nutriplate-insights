@@ -1,64 +1,89 @@
 import { useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { RiskScoreCircle } from "@/components/RiskScoreCircle";
-import {
-  NutrientRadarChart,
-  sampleNutrientData,
-} from "@/components/NutrientRadarChart";
+import { NutrientRadarChart } from "@/components/NutrientRadarChart";
 import { RedundancyCard } from "@/components/RedundancyCard";
-import { ArrowLeft, RefreshCw, Leaf, Sparkles } from "lucide-react";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { ArrowLeft, RefreshCw, Leaf, Sparkles, AlertCircle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { foods } from "@/data/foods";
+import { toast } from "sonner";
+
+interface NutrientData {
+  nutrient: string;
+  coverage: number;
+}
+
+interface Redundancy {
+  title: string;
+  description: string;
+  severity: "critical" | "warning" | "info";
+  foods?: string[];
+}
+
+interface Suggestion {
+  emoji: string;
+  text: string;
+}
+
+interface AnalysisResult {
+  riskScore: number;
+  nutrientData: NutrientData[];
+  redundancies: Redundancy[];
+  suggestions: Suggestion[];
+}
 
 export default function Results() {
   const navigate = useNavigate();
   const location = useLocation();
-  const selectedFoods = (location.state?.selectedFoods as string[]) || [];
+  const selectedFoodIds = (location.state?.selectedFoods as string[]) || [];
+  
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
 
-  // Placeholder data for MVP
-  const riskScore = 65;
+  // Convert food IDs to food names for the AI
+  const selectedFoodNames = selectedFoodIds.map(id => {
+    const food = foods.find(f => f.id === id);
+    return food ? food.name : id;
+  });
 
-  const redundancies = [
-    {
-      title: "High Grain Overlap",
-      description:
-        "You're eating multiple refined grains that offer similar nutrients. Consider adding whole grains for more fiber variety.",
-      severity: "warning" as const,
-      foods: ["Rice", "Roti", "Paratha"],
-    },
-    {
-      title: "Limited Omega-3 Sources",
-      description:
-        "Your current selection lacks foods rich in Omega-3 fatty acids. This is common in vegetarian diets.",
-      severity: "critical" as const,
-    },
-    {
-      title: "Good Legume Variety",
-      description:
-        "You're eating different types of dal which is great for protein diversity!",
-      severity: "info" as const,
-      foods: ["Toor Dal", "Moong Dal"],
-    },
-  ];
+  useEffect(() => {
+    if (selectedFoodIds.length === 0) return;
 
-  const suggestions = [
-    {
-      emoji: "🐟",
-      text: "Add fish twice a week for Omega-3 and Vitamin D",
-    },
-    {
-      emoji: "🥜",
-      text: "Include walnuts or flaxseeds for plant-based Omega-3",
-    },
-    {
-      emoji: "🥬",
-      text: "Add more leafy greens for Iron and Vitamin A",
-    },
-    {
-      emoji: "☀️",
-      text: "Consider fortified foods or sunlight for Vitamin D",
-    },
-  ];
+    const fetchAnalysis = async () => {
+      setIsLoading(true);
+      setError(null);
 
-  if (selectedFoods.length === 0) {
+      try {
+        const { data, error: fnError } = await supabase.functions.invoke('analyze-foods', {
+          body: { selectedFoods: selectedFoodNames }
+        });
+
+        if (fnError) {
+          throw new Error(fnError.message);
+        }
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        setAnalysis(data);
+      } catch (err) {
+        console.error("Analysis error:", err);
+        const message = err instanceof Error ? err.message : "Failed to analyze foods";
+        setError(message);
+        toast.error("Analysis failed", { description: message });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAnalysis();
+  }, [selectedFoodIds.join(',')]);
+
+  if (selectedFoodIds.length === 0) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
         <div className="text-6xl mb-4">🍽️</div>
@@ -75,6 +100,57 @@ export default function Results() {
       </div>
     );
   }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+        <LoadingSpinner size="lg" />
+        <h1 className="text-xl font-semibold text-foreground mt-6 mb-2">
+          Analyzing your diet...
+        </h1>
+        <p className="text-muted-foreground max-w-sm">
+          Our AI is evaluating {selectedFoodNames.length} foods for nutritional diversity and monoculture risks.
+        </p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+          <AlertCircle className="w-8 h-8 text-destructive" />
+        </div>
+        <h1 className="text-xl font-semibold text-foreground mb-2">
+          Analysis Failed
+        </h1>
+        <p className="text-muted-foreground mb-6 max-w-sm">
+          {error}
+        </p>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={() => navigate("/analyze")}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Go Back
+          </Button>
+          <Button onClick={() => window.location.reload()}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Try Again
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!analysis) {
+    return null;
+  }
+
+  // Transform nutrient data for radar chart
+  const radarData = analysis.nutrientData.map(n => ({
+    nutrient: n.nutrient,
+    value: n.coverage,
+    fullMark: 100,
+  }));
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -115,9 +191,9 @@ export default function Results() {
           <h1 className="text-xl font-semibold text-foreground mb-6">
             Your Nutritional Diversity Score
           </h1>
-          <RiskScoreCircle score={riskScore} />
+          <RiskScoreCircle score={analysis.riskScore} />
           <p className="text-sm text-muted-foreground mt-4 max-w-sm mx-auto">
-            Based on {selectedFoods.length} foods you regularly eat. Lower
+            Based on {selectedFoodNames.length} foods you regularly eat. Lower
             scores indicate better diversity.
           </p>
         </section>
@@ -128,7 +204,7 @@ export default function Results() {
             <span>📊</span> Nutrient Coverage
           </h2>
           <div className="bg-card rounded-2xl shadow-nutri border border-border p-4">
-            <NutrientRadarChart data={sampleNutrientData} />
+            <NutrientRadarChart data={radarData} />
             <p className="text-xs text-muted-foreground text-center mt-2">
               Higher values indicate better coverage from your food choices
             </p>
@@ -141,7 +217,7 @@ export default function Results() {
             <span>🔍</span> What We Found
           </h2>
           <div className="space-y-4">
-            {redundancies.map((item, i) => (
+            {analysis.redundancies.map((item, i) => (
               <RedundancyCard
                 key={i}
                 title={item.title}
@@ -164,7 +240,7 @@ export default function Results() {
               Small additions that could make a big difference:
             </p>
             <ul className="space-y-3">
-              {suggestions.map((suggestion, i) => (
+              {analysis.suggestions.map((suggestion, i) => (
                 <li key={i} className="flex items-start gap-3">
                   <span className="text-xl flex-shrink-0">
                     {suggestion.emoji}
